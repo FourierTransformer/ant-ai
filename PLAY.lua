@@ -1,15 +1,23 @@
-local http = require("socket.http")
+local http = require("libs/socket.http")
 local json = require("dkjson")
-local ltn12 = require("ltn12")
+local ltn12 = require("libs/ltn12")
 local ffi = require("ffi")
 
--- allows us to use C std lib's Sleep function!
+-- allows us to use C std lib's Sleep(Windows)/Poll(osx/linux) function!
 ffi.cdef[[
 void Sleep(int ms);
+int poll(struct pollfd *fds, unsigned long nfds, int timeout);
 ]]
 
-local function sleep(ms)
+local sleep
+if ffi.os == "Windows" then
+  function sleep(ms)
     ffi.C.Sleep(ms)
+  end
+else
+  function sleep(ms)
+    ffi.C.poll(nil, 0, ms)
+  end
 end
 
 -- Internal class constructor
@@ -48,6 +56,7 @@ local function httpRequest(url, method, header, data)
 
     if code ~= 200 then
         print("ruh roh", code, table.concat(response, "\n\n\n"))
+        error("THE PLAYGROUND EXPLODED RUN AWAYYYYYYYYY!!!!!!!!")
     end
 
     return json.decode(table.concat(response))
@@ -336,6 +345,6 @@ function client:start()
 
 end
 
--- local derp = client:new("Fretabladid", "http://antsgame.azurewebsites.net")
-local derp = client:new("Fretabladid", "http://localhost:16901")
+local derp = client:new("Fretabladid", "http://antsgame.azurewebsites.net")
+-- local derp = client:new("Fretabladid", "http://localhost:16901")
 derp:start()

@@ -1,6 +1,6 @@
-local http = require("libs/socket.http")
+local http = require("socket.http")
 local json = require("dkjson")
-local ltn12 = require("libs/ltn12")
+local ltn12 = require("ltn12")
 local ffi = require("ffi")
 
 -- allows us to use C std lib's Sleep(Windows)/Poll(osx/linux) function!

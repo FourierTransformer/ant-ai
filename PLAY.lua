@@ -2,6 +2,7 @@ local http = require("socket.http")
 local json = require("dkjson")
 local ltn12 = require("ltn12")
 local ffi = require("ffi")
+local board = require("board")
 
 -- allows us to use C std lib's Sleep(Windows)/Poll(osx/linux) function!
 ffi.cdef[[
@@ -62,11 +63,6 @@ local function httpRequest(url, method, header, data)
     return json.decode(table.concat(response))
 end
 
--- for converting x/y pair to cell id's
-local function convertToId(x, y, width)
-    return y*width+x + 1
-end
-
 -- initialize a client class
 local client = class()
 function client:__init(name, url)
@@ -105,136 +101,6 @@ function client:getGameInfo()
     return data
 end
 
-local function boardIndex(x, y, width)
-    return (y-1)*width+x
-end
-
-local cell = class()
-function cell:__init()
-    self.type = nil
-    self.neighbors = {}
-    self.Id = nil
-    -- the higher this value, the more we need to go there!
-    self.approachability = 0
-end
-
-local board = class()
-function board:__init(width, height)
-    self.cells = {}
-    self.width = width
-    self.height = height
-    
-    -- initialize all the cells
-    for i = 1, width do
-        self.cells[i] = {}
-        for j = 1, height do
-            self.cells[i][j] = cell:new()
-        end
-    end
-
-    -- cool, now setup pointers for the neighbors
-    --(remember, you can't create a pointer to an object that doesn't exist!)
-    for y = 1, height do
-        for x = 1, width do
-            if x == 1 then
-                self.cells[x][y].neighbors[1] = self.cells[width][y]
-                self.cells[x][y].neighbors[2] = self.cells[x+1][y]
-            elseif x == width then
-                self.cells[x][y].neighbors[1] = self.cells[x-1][y]
-                self.cells[x][y].neighbors[2] = self.cells[1][y]
-            else
-                self.cells[x][y].neighbors[1] = self.cells[x-1][y]
-                self.cells[x][y].neighbors[2] = self.cells[x+1][y]
-            end
-
-            if y == 1 then
-                self.cells[x][y].neighbors[3] = self.cells[x][height]
-                self.cells[x][y].neighbors[4] = self.cells[x][y+1]
-            elseif y == height then
-                self.cells[x][y].neighbors[3] = self.cells[x][y-1]
-                self.cells[x][y].neighbors[4] = self.cells[x][1]
-            else
-                self.cells[x][y].neighbors[3] = self.cells[x][y-1]
-                self.cells[x][y].neighbors[4] = self.cells[x][y+1]
-            end
-        end
-    end
-
-end
-
-function board:updateAntPosition(x, y, direction)
-    if self.cells[x][y].type == "ant" then
-        self.cells[x][y].type = nil
-        if direction == "right" then
-            if x == self.width then
-                self.cells[1][y].type = "ant"
-            else
-                self.cells[x+1][y].type = "ant"
-            end
-        elseif direction == "left" then
-            if x == 1 then
-                self.cells[self.width][y].type = "ant"
-            else
-                self.cells[x-1][y].type = "ant"
-            end
-        elseif direction == "up" then
-            if y == 1 then
-                self.cells[x][self.height].type = "ant"
-            else
-                self.cells[x][y-1].type = "ant"
-            end
-        elseif direction == "down" then
-            if y == self.height then
-                self.cells[x][1].type = "ant"
-            else
-                self.cells[x][y+1].type = "ant"
-            end
-        end
-    else
-        print("Current Type:", self.cells[x][y].type)
-        error("OH MAN, you tried updating a position of something that wasn't an ant...")
-    end
-
-end
-
-function board:checkFutureType(x, y, direction)
-    if direction == "right" then
-        if x == self.width then
-            return self.cells[1][y].type
-        else
-            return self.cells[x+1][y].type
-        end
-    elseif direction == "left" then
-        if x == 1 then
-            return self.cells[self.width][y].type
-        else
-            return self.cells[x-1][y].type
-        end
-    elseif direction == "up" then
-        if y == 1 then
-            return self.cells[x][self.height].type
-        else
-            return self.cells[x][y-1].type
-        end
-    elseif direction == "down" then
-        if y == self.height then
-            return self.cells[x][1].type
-        else
-            return self.cells[x][y+1].type
-        end
-    end
-end
-
-function board:clear()
-    for i = 1, self.width do
-        for j = 1, self.height do
-            self.cells[i][j].type = nil
-            self.cells[i][j].id = nil
-        end
-    end
-
-end
-
 function client:updateBoard(gameState)
     -- HOME (may not be fully accurate as ants do spawn atop it)
     local myHill = gameState.Hill
@@ -244,13 +110,6 @@ function client:updateBoard(gameState)
     for i = 1, #gameState.Walls do
         local currentWall = gameState.Walls[i]
         self.board.cells[currentWall.X+1][currentWall.Y+1].type = "wall"
-    end
-
-    -- will store my ants
-    for i = 1, #gameState.FriendlyAnts do
-        local currentAnt = gameState.FriendlyAnts[i]
-        self.board.cells[currentAnt.X+1][currentAnt.Y+1].type = "ant"
-        self.board.cells[currentAnt.X+1][currentAnt.Y+1].Id = currentAnt.Id
     end
 
     -- food bitches!
@@ -271,13 +130,58 @@ function client:updateBoard(gameState)
         self.board.cells[currentHill.X+1][currentHill.Y+1].type = "enemyHill"
     end
 
+    -- will store my ants
+    for k = 1, #gameState.FriendlyAnts do
+        local currentAnt = gameState.FriendlyAnts[k]
+        self.board.cells[currentAnt.X+1][currentAnt.Y+1].type = "ant"
+        self.board.cells[currentAnt.X+1][currentAnt.Y+1].antId = currentAnt.Id
+
+        -- poor man's really fast BFS (top)
+        for j = 10, 0, -1 do
+            for i = -(10-j), 10-j do
+                local x = (currentAnt.X+1+i)
+                x = x % gameState.Width + 1
+                local y = (currentAnt.Y+1+j)
+                y = y % gameState.Height + 1
+                self.board.cells[x][y].approachability = 0
+            end
+        end
+
+        -- poor man's BFS (bottom)
+        for j = -10, -1, 1 do
+            for i = -(10+j), 10+j do
+                local x = (currentAnt.X+1+i)
+                x = x % gameState.Width + 1
+                local y = (currentAnt.Y+1+j)
+                y = y % gameState.Height + 1
+                self.board.cells[x][y].approachability = 0
+            end
+        end
+
+        local path = self.board:aStar(currentAnt.X+1, currentAnt.Y+1, 15, 15)
+        print("path length", #path)
+
+    end
+
+    for j = 1, gameState.Height do
+        local herp = ""
+        for i = 1, gameState.Width do
+            local currentCell = self.board.cells[i][j]
+            if currentCell.type == "ant" then
+                herp = herp .. "A "
+            else
+                herp = herp .. self.board.cells[i][j].approachability .. " "
+            end
+        end
+        print(herp)
+    end
+
 end
 
 function client:update(gameState)
 
     -- OH BOY
     if self.board == nil then
-        print(gameState.Width)
         self.board = board:new(gameState.Width, gameState.Height)
     end
 
@@ -318,7 +222,6 @@ end
 function client:sendUpdate()
     local update = { AuthToken = self.AuthToken, GameId = self.GameId, MoveAntRequests = self.pendingMoves }
     local response = httpRequest(self.url .. "/api/game/update", "POST", self.headers, update)
-    --print("Moves Successful:", response.Success)
     return response
 end
 

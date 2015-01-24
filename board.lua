@@ -146,14 +146,14 @@ local function dist2(startX, startY, endX, endY)
   return dx * dx + dy * dy
 end
 
-local function constructPath(cameFrom, currentNode)
+local function constructPath(cameFrom, cameFromDirection, currentNode)
     local final  = {}
     while cameFrom[currentNode] ~= nil do
-        table.insert(final, 1, currentNode)
+        table.insert(final, 1, cameFromDirection[currentNode])
         currentNode = cameFrom[currentNode]
     end
     -- for i,v in ipairs(final) do print(i, v) end
-
+    print("derp", table.concat(final, ","))
     return final
 end
 
@@ -161,6 +161,7 @@ function board:aStar(startX, startY, endX, endY)
     local closedList = {}
     local openList = Heap()
     local cameFrom = {}
+    local cameFromDirection = {}
     local linkCost = {}
     for i = 1, self.width do
         for j = 1, self.height do
@@ -176,17 +177,18 @@ function board:aStar(startX, startY, endX, endY)
         local current = openList:pop()
         -- WE MADE IT
         if current.x == endX and current.y == endY then
-            return constructPath(cameFrom, self.cells[endX][endY])
+            return constructPath(cameFrom, cameFromDirection, self.cells[endX][endY])
         end
         closedList[current.Id] = true
         for i = 1, #current.neighbors do
             local neighbor = current.neighbors[i]
-            if closedList[neighbor.Id] == nil and neighbor.type ~= "wall" then
+            if closedList[neighbor.Id] == nil and neighbor.type ~= "wall" and neighbor.type ~= "ant" then
 
                 local tentLinkCost = linkCost[current.Id] + dist2(current.x, current.y, neighbor.x, neighbor.y)
 
                 if linkCost[neighbor.Id] == math.huge or tentLinkCost < linkCost[neighbor.Id] then
                     cameFrom[neighbor] = current
+                    cameFromDirection[neighbor] = i
                     linkCost[neighbor.Id] = tentLinkCost
                     local totalCost = linkCost[neighbor.Id] + dist2(neighbor.x, neighbor.y, endX, endY)
                     openList:push(neighbor, totalCost)

@@ -63,6 +63,28 @@ local function httpRequest(url, method, header, data)
     return json.decode(table.concat(response))
 end
 
+local ant = class()
+function ant:__init(x, y)
+    self.x = x
+    self.y = y
+    self.status = nil --"defend", "explore", "gather", or "follow"
+    self.direction = nil --"left", "right", "up", "down"
+    self.destinationX = nil
+    self.destinationY = nil
+end
+
+function ant:determineDirection(destX, destY)
+    if destX-self.x == 1 then return "right"
+    elseif self.x-destX == 1 then return "left"
+    elseif destY-self.y == 1 then return "up"
+    elseif self.y-destY == 1 then return "down"
+    elseif self.x-destX < 0 then return "left" --WRAPAROUND
+    elseif self.x-destX > 0 then return "right" --JUMP ON IT
+    elseif self.y-destY < 0 then return "down"
+    elseif self.y-destY > 0 then return "up"
+    end
+end
+
 -- initialize a client class
 local client = class()
 function client:__init(name, url)
@@ -74,6 +96,7 @@ function client:__init(name, url)
     self.AuthToken = nil
     self.name = name
     self.board = nil
+    self.ants = {}
 end
 
 function client:logon()
@@ -130,13 +153,28 @@ function client:updateBoard(gameState)
         self.board.cells[currentHill.X+1][currentHill.Y+1].type = "enemyHill"
     end
 
+    for k = 1, #gameState.FriendlyAnts do
+        local currentAnt = self.ants[gameState.FriendlyAnts[k].Id]
+        if currentAnt and currentAnt.status ~= nil then
+            self.board.cells[currentAnt.destinationX][currentAnt.destinationY].type = "finalDestination"
+        end
+    end
+
     -- will store my ants
     for k = 1, #gameState.FriendlyAnts do
         local currentAnt = gameState.FriendlyAnts[k]
         self.board.cells[currentAnt.X+1][currentAnt.Y+1].type = "ant"
-        self.board.cells[currentAnt.X+1][currentAnt.Y+1].antId = currentAnt.Id
+        -- self.board.cells[currentAnt.X+1][currentAnt.Y+1].antId = currentAnt.Id
+        if self.ants[currentAnt.Id] == nil then
+            self.ants[currentAnt.Id] = ant:new(currentAnt.X+1, currentAnt.Y+1)
+        else
+            self.ants[currentAnt.Id].x = currentAnt.X+1
+            self.ants[currentAnt.Id].y = currentAnt.Y+1
+        end
 
         -- poor man's really fast BFS (top)
+        local distanceToFood = math.huge
+        local foodX, foodY = nil, nil
         for j = 10, 0, -1 do
             for i = -(10-j), 10-j do
                 local x = (currentAnt.X+1+i)
@@ -144,6 +182,17 @@ function client:updateBoard(gameState)
                 local y = (currentAnt.Y+1+j)
                 y = y % gameState.Height + 1
                 self.board.cells[x][y].approachability = 0
+
+                --MAYBE we'll find some foods
+                if self.board.cells[x][y].type == "food" then
+                    local foodDist = j + math.abs(i)
+                    if foodDist < distanceToFood then
+                        distanceToFood = foodDist
+                        foodX = x
+                        foodY = y
+                    end
+                end
+
             end
         end
 
@@ -155,11 +204,28 @@ function client:updateBoard(gameState)
                 local y = (currentAnt.Y+1+j)
                 y = y % gameState.Height + 1
                 self.board.cells[x][y].approachability = 0
+
+                --MAYBE we'll find some foods
+                if self.board.cells[x][y].type == "food" then
+                    local foodDist = j + math.abs(i)
+                    if foodDist < distanceToFood then
+                        distanceToFood = foodDist
+                        foodX = x
+                        foodY = y
+                    end
+                end
+
             end
         end
 
-        local path = self.board:aStar(currentAnt.X+1, currentAnt.Y+1, 15, 15)
-        print("path length", #path)
+        if distanceToFood ~= math.huge and self.ants[currentAnt.Id].status == nil then
+            self.board.cells[foodX][foodY].type = "finalDestination"
+            self.ants[currentAnt.Id].status = "gather"
+            self.ants[currentAnt.Id].destinationX = foodX
+            self.ants[currentAnt.Id].destinationY = foodY
+        end
+
+        -- print("path length", #path)
 
     end
 
@@ -200,17 +266,30 @@ function client:update(gameState)
     -- update turn info
     self:getTurnInfo()
 
-    local random = {"up", "down", "left", "right"}
+    local random = {"left", "right", "up", "down"}
 
     for i = 1, #gameState.FriendlyAnts do
         local currentAnt = gameState.FriendlyAnts[i]
         local crazyRandom
         local future
-        repeat
-            crazyRandom = random[math.random(4)]
-            future = self.board:checkFutureType(currentAnt.X+1, currentAnt.Y+1, crazyRandom)
-            print(future)
-        until future ~= "ant" and future ~= "wall"
+
+        if self.ants[currentAnt.Id].status == nil then
+            repeat
+                crazyRandom = random[math.random(4)]
+                future = self.board:checkFutureType(currentAnt.X+1, currentAnt.Y+1, crazyRandom)
+                print(future)
+            until future ~= "ant" and future ~= "wall"
+            self.board:updateAntPosition(currentAnt.X+1, currentAnt.Y+1, crazyRandom)
+        else
+            local path = self.board:aStar(self.ants[currentAnt.Id].x, self.ants[currentAnt.Id].y, self.ants[currentAnt.Id].destinationX, self.ants[currentAnt.Id].destinationY)
+            if path == nil then 
+                self.ants[currentAnt.Id].status = nil 
+                crazyRandom = random[1]
+            else
+                crazyRandom = random[path[1]]
+            end
+        end
+
         self.board:updateAntPosition(currentAnt.X+1, currentAnt.Y+1, crazyRandom)
         self.pendingMoves [ i ] = {antId = currentAnt.Id, direction = crazyRandom}
     end

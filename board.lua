@@ -98,7 +98,7 @@ function board:updateAntPosition(x, y, direction)
             end
         end
     else
-        print("Current Type:", self.cells[x][y].type)
+        -- print("Current Type:", self.cells[x][y].type)
         -- error("OH MAN, you tried updating a position of something that wasn't an ant...")
     end
 
@@ -132,6 +132,21 @@ function board:checkFutureType(x, y, direction)
     end
 end
 
+function board:findFirstAvailable(x, y, direction)
+    local direction = direction % 4 + 1
+    local goodDirection = nil
+    local i = 1
+    while i <= 4 do
+        local neigh = self.cells[x][y].neighbors[direction]
+        if neigh.type ~= "ant" and neigh.type ~= "wall" then
+            goodDirection = direction
+        end
+        direction = direction % 4 + 1
+        i = i + 1
+    end
+    return goodDirection
+end
+
 function board:clear()
     for i = 1, self.width do
         for j = 1, self.height do
@@ -153,7 +168,6 @@ local function constructPath(cameFrom, cameFromDirection, currentNode)
         currentNode = cameFrom[currentNode]
     end
     -- for i,v in ipairs(final) do print(i, v) end
-    print("derp", table.concat(final, ","))
     return final
 end
 

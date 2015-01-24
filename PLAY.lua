@@ -73,18 +73,6 @@ function ant:__init(x, y)
     self.destinationY = nil
 end
 
-function ant:determineDirection(destX, destY)
-    if destX-self.x == 1 then return "right"
-    elseif self.x-destX == 1 then return "left"
-    elseif destY-self.y == 1 then return "up"
-    elseif self.y-destY == 1 then return "down"
-    elseif self.x-destX < 0 then return "left" --WRAPAROUND
-    elseif self.x-destX > 0 then return "right" --JUMP ON IT
-    elseif self.y-destY < 0 then return "down"
-    elseif self.y-destY > 0 then return "up"
-    end
-end
-
 -- initialize a client class
 local client = class()
 function client:__init(name, url)
@@ -156,7 +144,10 @@ function client:updateBoard(gameState)
     for k = 1, #gameState.FriendlyAnts do
         local currentAnt = self.ants[gameState.FriendlyAnts[k].Id]
         if currentAnt and currentAnt.status ~= nil then
-            self.board.cells[currentAnt.destinationX][currentAnt.destinationY].type = "finalDestination"
+            local destType = self.board.cells[currentAnt.destinationX][currentAnt.destinationY].type
+
+                self.board.cells[currentAnt.destinationX][currentAnt.destinationY].type = "finalDestination"
+
         end
     end
 
@@ -207,7 +198,7 @@ function client:updateBoard(gameState)
 
                 --MAYBE we'll find some foods
                 if self.board.cells[x][y].type == "food" then
-                    local foodDist = j + math.abs(i)
+                    local foodDist = math.abs(j) + math.abs(i)
                     if foodDist < distanceToFood then
                         distanceToFood = foodDist
                         foodX = x
@@ -269,29 +260,32 @@ function client:update(gameState)
     local random = {"left", "right", "up", "down"}
 
     for i = 1, #gameState.FriendlyAnts do
-        local currentAnt = gameState.FriendlyAnts[i]
+        local currentId = gameState.FriendlyAnts[i].Id
+        local currentAnt = self.ants[currentId]
         local crazyRandom
-        local future
 
-        if self.ants[currentAnt.Id].status == nil then
-            repeat
-                crazyRandom = random[math.random(4)]
-                future = self.board:checkFutureType(currentAnt.X+1, currentAnt.Y+1, crazyRandom)
-                print(future)
-            until future ~= "ant" and future ~= "wall"
-            self.board:updateAntPosition(currentAnt.X+1, currentAnt.Y+1, crazyRandom)
+        if currentAnt.status == nil then
+            local firstFree = self.board:findFirstAvailable(currentAnt.x, currentAnt.y, math.random(4))
+            crazyRandom = random[firstFree]
         else
-            local path = self.board:aStar(self.ants[currentAnt.Id].x, self.ants[currentAnt.Id].y, self.ants[currentAnt.Id].destinationX, self.ants[currentAnt.Id].destinationY)
-            if path == nil then 
-                self.ants[currentAnt.Id].status = nil 
-                crazyRandom = random[1]
+            local path = self.board:aStar(currentAnt.x, currentAnt.y, currentAnt.destinationX, currentAnt.destinationY)
+
+            if path == nil or path[1] == nil then 
+                currentAnt.status = nil 
+                currentAnt.destinationX = nil
+                currentAnt.destinationY = nil
+                local firstFree = self.board:findFirstAvailable(currentAnt.x, currentAnt.y, math.random(4))
+                crazyRandom = random[firstFree]
             else
                 crazyRandom = random[path[1]]
             end
         end
 
-        self.board:updateAntPosition(currentAnt.X+1, currentAnt.Y+1, crazyRandom)
-        self.pendingMoves [ i ] = {antId = currentAnt.Id, direction = crazyRandom}
+        if crazyRandom ~= nil then
+            self.board:updateAntPosition(currentAnt.x, currentAnt.y, crazyRandom)
+            self.pendingMoves [ i ] = {antId = currentId, direction = crazyRandom}
+        end
+
     end
 
     self.board:clear()
@@ -327,6 +321,6 @@ function client:start()
 
 end
 
-local derp = client:new("Fretabladid", "http://antsgame.azurewebsites.net")
--- local derp = client:new("Fretabladid", "http://localhost:16901")
+-- local derp = client:new("Fretabladid", "http://antsgame.azurewebsites.net")
+local derp = client:new("Fretabladid", "http://localhost:16901")
 derp:start()

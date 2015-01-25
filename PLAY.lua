@@ -145,9 +145,11 @@ function client:updateBoard(gameState)
         local currentAnt = self.ants[gameState.FriendlyAnts[k].Id]
         if currentAnt and currentAnt.status ~= nil then
             local destType = self.board.cells[currentAnt.destinationX][currentAnt.destinationY].type
-
-                self.board.cells[currentAnt.destinationX][currentAnt.destinationY].type = "finalDestination"
-
+                if destType ~= "food" then
+                    currentAnt.status = nil
+                else
+                    self.board.cells[currentAnt.destinationX][currentAnt.destinationY].type = "finalDestination"
+                end
         end
     end
 
@@ -209,12 +211,12 @@ function client:updateBoard(gameState)
             end
         end
 
-        if distanceToFood ~= math.huge and self.ants[currentAnt.Id].status == nil then
-            self.board.cells[foodX][foodY].type = "finalDestination"
-            self.ants[currentAnt.Id].status = "gather"
-            self.ants[currentAnt.Id].destinationX = foodX
-            self.ants[currentAnt.Id].destinationY = foodY
-        end
+        -- if distanceToFood ~= math.huge and self.ants[currentAnt.Id].status == nil then
+        --     self.board.cells[foodX][foodY].type = "finalDestination"
+        --     self.ants[currentAnt.Id].status = "gather"
+        --     self.ants[currentAnt.Id].destinationX = foodX
+        --     self.ants[currentAnt.Id].destinationY = foodY
+        -- end
 
         -- print("path length", #path)
 
@@ -266,7 +268,7 @@ function client:update(gameState)
 
         if currentAnt.status == nil then
             local firstFree = self.board:findFirstAvailable(currentAnt.x, currentAnt.y, math.random(4))
-            crazyRandom = random[firstFree]
+            crazyRandom = firstFree
         else
             local path = self.board:aStar(currentAnt.x, currentAnt.y, currentAnt.destinationX, currentAnt.destinationY)
 
@@ -275,15 +277,15 @@ function client:update(gameState)
                 currentAnt.destinationX = nil
                 currentAnt.destinationY = nil
                 local firstFree = self.board:findFirstAvailable(currentAnt.x, currentAnt.y, math.random(4))
-                crazyRandom = random[firstFree]
+                crazyRandom = firstFree
             else
-                crazyRandom = random[path[1]]
+                crazyRandom = path[1]
             end
         end
 
         if crazyRandom ~= nil then
             self.board:updateAntPosition(currentAnt.x, currentAnt.y, crazyRandom)
-            self.pendingMoves [ i ] = {antId = currentId, direction = crazyRandom}
+            self.pendingMoves [ i ] = {antId = currentId, direction = nil}
         end
 
     end

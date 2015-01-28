@@ -17,7 +17,7 @@ local cell = class()
 function cell:__init(x, y, id)
     self.x = x
     self.y = y
-    self.type = nil
+    self.type = "free"
     self.neighbors = {}
     self.Id = id
     self.antId = nil
@@ -30,7 +30,15 @@ function board:__init(width, height)
     self.cells = {}
     self.width = width
     self.height = height
-    
+    self.typeHeuristic = {
+        ["food"] = 0,
+        ["free"] = 5,
+        ["myHill"] = 5,
+        ["ant"] = math.huge,
+        ["enemy"] = 0,
+        ["enemyHill"] = 0,
+        ["wall"] = math.huge
+    }
     -- initialize all the cells
     for i = 1, width do
         self.cells[i] = {}
@@ -70,7 +78,7 @@ function board:__init(width, height)
 end
 
 function board:updateAntPosition(x, y, direction)
-    self.cells[x][y].type = nil
+    -- self.cells[x][y].type = "oldAnt"
     self.cells[x][y].neighbors[direction].type = "ant"
     -- if self.cells[x][y].type == "ant" then
     --     self.cells[x][y].type = nil
@@ -184,7 +192,8 @@ function board:aStar(startX, startY, endX, endY)
     local linkCost = {}
     for i = 1, self.width do
         for j = 1, self.height do
-            linkCost[self.cells[i][j].Id] = math.huge
+            local curentCell = self.cells[i][j]
+            linkCost[curentCell.Id] = self.typeHeuristic[curentCell.type]
         end
     end
 
@@ -201,11 +210,11 @@ function board:aStar(startX, startY, endX, endY)
         closedList[current.Id] = true
         for i = 1, #current.neighbors do
             local neighbor = current.neighbors[i]
-            if closedList[neighbor.Id] == nil and neighbor.type ~= "wall" and neighbor.type ~= "ant" then
+            if closedList[neighbor.Id] == nil and neighbor.type ~= "ant" and neighbor.type ~= "wall" then
 
                 local tentLinkCost = linkCost[current.Id] + dist2(current.x, current.y, neighbor.x, neighbor.y)
 
-                if linkCost[neighbor.Id] == math.huge or tentLinkCost < linkCost[neighbor.Id] then
+                if not openList:contains(neighbor) or tentLinkCost < linkCost[neighbor.Id] then
                     cameFrom[neighbor] = current
                     cameFromDirection[neighbor] = i
                     linkCost[neighbor.Id] = tentLinkCost

@@ -127,6 +127,9 @@ end
 --
 function Heap:__init()
   self.A = {}
+
+  -- used to determine if object is in heap
+  self.exists = {}
 end
 
 --- Peeks at the largest value in the heap.
@@ -150,6 +153,7 @@ function Heap:pop()
     self.A[1] = self.A[#self.A]
     remove(self.A, #self.A)
     minHeapify(self.A, 1)
+    self.exists[max.data] = false
     return max.data
 end
 
@@ -160,8 +164,13 @@ end
 --
 function Heap:push(data, key)
     local node = Node(data, -1)
+    self.exists[data] = true
     self.A[#self.A + 1] = node
     heapDecrease(self.A, #self.A, key or math.huge)
+end
+
+function Heap:contains(data)
+    return self.exists[data]
 end
 
 function Heap:isEmpty()

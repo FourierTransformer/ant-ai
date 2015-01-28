@@ -56,8 +56,10 @@ local function httpRequest(url, method, header, data)
     ok, code, headers = http.request{url = url, method = method, headers = sizeHeader, source = source, sink = save}
 
     if code ~= 200 then
-        print("ruh roh", code, table.concat(response, "\n\n\n"))
-        error("THE PLAYGROUND EXPLODED RUN AWAYYYYYYYYY!!!!!!!!")
+        print("Error Code:", code, table.concat(response, "\n\n\n"))
+        print(url)
+        print(jsonString)
+        error("Your Game Exploded. Goodbye.")
     end
 
     return json.decode(table.concat(response))
@@ -211,12 +213,12 @@ function client:updateBoard(gameState)
             end
         end
 
-        -- if distanceToFood ~= math.huge and self.ants[currentAnt.Id].status == nil then
-        --     self.board.cells[foodX][foodY].type = "finalDestination"
-        --     self.ants[currentAnt.Id].status = "gather"
-        --     self.ants[currentAnt.Id].destinationX = foodX
-        --     self.ants[currentAnt.Id].destinationY = foodY
-        -- end
+        if distanceToFood ~= math.huge and self.ants[currentAnt.Id].status == nil then
+            self.board.cells[foodX][foodY].type = "finalDestination"
+            self.ants[currentAnt.Id].status = "gather"
+            self.ants[currentAnt.Id].destinationX = foodX
+            self.ants[currentAnt.Id].destinationY = foodY
+        end
 
         -- print("path length", #path)
 
@@ -276,8 +278,7 @@ function client:update(gameState)
                 currentAnt.status = nil 
                 currentAnt.destinationX = nil
                 currentAnt.destinationY = nil
-                local firstFree = self.board:findFirstAvailable(currentAnt.x, currentAnt.y, math.random(4))
-                crazyRandom = firstFree
+                crazyRandom = self.board:findFirstAvailable(currentAnt.x, currentAnt.y, math.random(4))
             else
                 crazyRandom = path[1]
             end
@@ -285,7 +286,7 @@ function client:update(gameState)
 
         if crazyRandom ~= nil then
             self.board:updateAntPosition(currentAnt.x, currentAnt.y, crazyRandom)
-            self.pendingMoves [ i ] = {antId = currentId, direction = nil}
+            self.pendingMoves [ i ] = {antId = currentId, direction = random[crazyRandom]}
         end
 
     end
@@ -323,6 +324,6 @@ function client:start()
 
 end
 
--- local derp = client:new("Fretabladid", "http://antsgame.azurewebsites.net")
-local derp = client:new("Fretabladid", "http://localhost:16901")
+local derp = client:new("Fretabladid", "http://antsgame.azurewebsites.net")
+-- local derp = client:new("Fretabladid", "http://localhost:16901")
 derp:start()

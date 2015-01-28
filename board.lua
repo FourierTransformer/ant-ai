@@ -151,7 +151,7 @@ function board:findFirstAvailable(x, y, direction)
     while i <= 4 do
         local neigh = self.cells[x][y].neighbors[direction]
         if neigh.type == "food" then return direction end
-        if neigh.type ~= "ant" then
+        if neigh.type ~= "ant" and neigh.type ~= "wall" then
             goodDirection = direction
         end
         direction = direction % 4 + 1

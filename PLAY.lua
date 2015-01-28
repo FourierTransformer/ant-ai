@@ -59,7 +59,7 @@ local function httpRequest(url, method, header, data)
         print("Error Code:", code, table.concat(response, "\n\n\n"))
         print(url)
         print(jsonString)
-        error("Your Game Exploded. Goodbye.")
+        sleep(4000)
     end
 
     return json.decode(table.concat(response))
@@ -149,8 +149,8 @@ function client:updateBoard(gameState)
             local destType = self.board.cells[currentAnt.destinationX][currentAnt.destinationY].type
                 if destType ~= "food" then
                     currentAnt.status = nil
-                else
-                    self.board.cells[currentAnt.destinationX][currentAnt.destinationY].type = "finalDestination"
+                -- else
+                    -- self.board.cells[currentAnt.destinationX][currentAnt.destinationY].type = "finalDestination"
                 end
         end
     end
@@ -179,7 +179,7 @@ function client:updateBoard(gameState)
                 self.board.cells[x][y].approachability = 0
 
                 --MAYBE we'll find some foods
-                if self.board.cells[x][y].type == "food" then
+                if self.board.cells[x][y].type == "food" or self.board.cells[x][y].type == "enemyHill" then
                     local foodDist = j + math.abs(i)
                     if foodDist < distanceToFood then
                         distanceToFood = foodDist
@@ -201,7 +201,7 @@ function client:updateBoard(gameState)
                 self.board.cells[x][y].approachability = 0
 
                 --MAYBE we'll find some foods
-                if self.board.cells[x][y].type == "food" then
+                if self.board.cells[x][y].type == "food" or self.board.cells[x][y].type == "enemyHill" then
                     local foodDist = math.abs(j) + math.abs(i)
                     if foodDist < distanceToFood then
                         distanceToFood = foodDist
@@ -214,7 +214,7 @@ function client:updateBoard(gameState)
         end
 
         if distanceToFood ~= math.huge and self.ants[currentAnt.Id].status == nil then
-            self.board.cells[foodX][foodY].type = "finalDestination"
+            -- self.board.cells[foodX][foodY].type = "finalDestination"
             self.ants[currentAnt.Id].status = "gather"
             self.ants[currentAnt.Id].destinationX = foodX
             self.ants[currentAnt.Id].destinationY = foodY
@@ -286,7 +286,8 @@ function client:update(gameState)
 
         if crazyRandom ~= nil then
             self.board:updateAntPosition(currentAnt.x, currentAnt.y, crazyRandom)
-            self.pendingMoves [ i ] = {antId = currentId, direction = random[crazyRandom]}
+            print(currentId, random[crazyRandom])
+            self.pendingMoves [ #self.pendingMoves+1 ] = {antId = currentId, direction = random[crazyRandom]}
         end
 
     end

@@ -75,6 +75,18 @@ function ant:__init(x, y)
     self.destinationY = nil
 end
 
+function ant:dist2(x, y)
+    local dx, dy = (self.x - x), (self.y - y)
+    return dx * dx + dy * dy
+end
+
+local food = class()
+function food:__init(x, y)
+    self.x = x
+    self.y = y
+    self.nearestAnt = nil
+end
+
 -- initialize a client class
 local client = class()
 function client:__init(name, url)
@@ -87,6 +99,7 @@ function client:__init(name, url)
     self.name = name
     self.board = nil
     self.ants = {}
+    self.food = {}
 end
 
 function client:logon()
@@ -128,6 +141,7 @@ function client:updateBoard(gameState)
     -- food bitches!
     for i = 1, #gameState.VisibleFood do
         local currentFood = gameState.VisibleFood[i]
+        self.food[i] = food:new(currentFood.X+1, currentFood.Y+1)
         self.board.cells[currentFood.X+1][currentFood.Y+1].type = "food"
     end
 
@@ -182,7 +196,11 @@ function client:updateBoard(gameState)
                 if self.board.cells[x][y].type == "food" or self.board.cells[x][y].type == "enemyHill" then
                     local foodDist = j + math.abs(i)
                     if foodDist < distanceToFood then
-                        distanceToFood = foodDist
+                        if self.board.cells[x][y].type == "enemyHill" then
+                            distanceToFood = 0
+                        else
+                            distanceToFood = foodDist
+                        end
                         foodX = x
                         foodY = y
                     end
@@ -204,7 +222,11 @@ function client:updateBoard(gameState)
                 if self.board.cells[x][y].type == "food" or self.board.cells[x][y].type == "enemyHill" then
                     local foodDist = math.abs(j) + math.abs(i)
                     if foodDist < distanceToFood then
-                        distanceToFood = foodDist
+                        if self.board.cells[x][y].type == "enemyHill" then
+                            distanceToFood = 0
+                        else
+                            distanceToFood = foodDist
+                        end
                         foodX = x
                         foodY = y
                     end
@@ -286,7 +308,6 @@ function client:update(gameState)
 
         if crazyRandom ~= nil then
             self.board:updateAntPosition(currentAnt.x, currentAnt.y, crazyRandom)
-            print(currentId, random[crazyRandom])
             self.pendingMoves [ #self.pendingMoves+1 ] = {antId = currentId, direction = random[crazyRandom]}
         end
 
@@ -318,6 +339,7 @@ function client:start()
         self:update(gameState)
         self:sendUpdate()
         self.pendingMoves = {}
+        self.food = {}
         if self.timeToNextTurn > 0 then
             sleep(self.timeToNextTurn)
         end

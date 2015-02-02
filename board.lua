@@ -169,9 +169,15 @@ function board:clear()
     end
 end
 
-local function dist2(startX, startY, endX, endY)
-  local dx, dy = (startX - endX), (startY - endY)
-  return dx * dx + dy * dy
+function board:dist2(startX, startY, endX, endY)
+    local dx, dy = (startX - endX), (startY - endY)
+    if math.abs(dx) > self.width / 2 then
+        dx = math.abs(dx) - self.width
+    end
+    if math.abs(dy) > self.height / 2 then
+        dy = math.abs(dy) - self.height
+    end
+    return dx * dx + dy * dy
 end
 
 local function constructPath(cameFrom, cameFromDirection, currentNode)
@@ -197,7 +203,7 @@ function board:aStar(startX, startY, endX, endY)
         end
     end
 
-    openList:push(self.cells[startX][startY], dist2(startX, startY, endX, endY))
+    openList:push(self.cells[startX][startY], self:dist2(startX, startY, endX, endY))
     linkCost[self.cells[startX][startY].Id] = 0
 
     while openList:isEmpty() == false do
@@ -212,13 +218,13 @@ function board:aStar(startX, startY, endX, endY)
             local neighbor = current.neighbors[i]
             if closedList[neighbor.Id] == nil and neighbor.type ~= "ant" and neighbor.type ~= "wall" then
 
-                local tentLinkCost = linkCost[current.Id] + dist2(current.x, current.y, neighbor.x, neighbor.y)
+                local tentLinkCost = linkCost[current.Id] + self:dist2(current.x, current.y, neighbor.x, neighbor.y)
 
                 if not openList:contains(neighbor) or tentLinkCost < linkCost[neighbor.Id] then
                     cameFrom[neighbor] = current
                     cameFromDirection[neighbor] = i
                     linkCost[neighbor.Id] = tentLinkCost
-                    local totalCost = linkCost[neighbor.Id] + dist2(neighbor.x, neighbor.y, endX, endY)
+                    local totalCost = linkCost[neighbor.Id] + self:dist2(neighbor.x, neighbor.y, endX, endY)
                     openList:push(neighbor, totalCost)
                 end
 

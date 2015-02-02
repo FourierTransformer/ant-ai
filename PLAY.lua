@@ -242,9 +242,40 @@ function client:updateBoard(gameState)
             self.ants[currentAnt.Id].destinationY = foodY
         end
 
+        -- for i = 1, #self.food do
+        --     local shortestDistance = math.huge
+        --     local nearestAnt = nil
+        --     for j, ant in pairs(self.ants) do
+        --         local antDist = ant:dist2(self.food[i].x, self.food[i].y)
+        --         if antDist < shortestDistance then
+        --             shortestDistance = antDist
+        --             nearestAnt = ant
+        --         end
+        --     end
+        --     if distanceToFood ~= math.huge and nearestAnt.status == nil then
+        --         -- self.board.cells[foodX][foodY].type = "finalDestination"
+        --         nearestAnt.status = "gather"
+        --         nearestAnt.destinationX = self.food[i].x
+        --         nearestAnt.destinationY = self.food[i].y
+        --     end
+        -- end
+
         -- print("path length", #path)
 
     end
+
+    -- if #gameState.FriendlyAnts > 5 then
+    --     for i= 1, #gameState.EnemyHills do
+    --         local currentHill = gameState.EnemyHills[i]
+    --         self.board.cells[currentHill.X+1][currentHill.Y+1].type = "enemyHill"
+    --         for k = 1, #gameState.FriendlyAnts do
+    --             local currentAnt = gameState.FriendlyAnts[k]
+    --             self.ants[currentAnt.Id].status = "attack"
+    --             self.ants[currentAnt.Id].destinationX = currentHill.X+1
+    --             self.ants[currentAnt.Id].destinationY = currentHill.Y+1
+    --         end
+    --     end
+    -- end
 
     for j = 1, gameState.Height do
         local herp = ""
@@ -256,7 +287,7 @@ function client:updateBoard(gameState)
                 herp = herp .. self.board.cells[i][j].approachability .. " "
             end
         end
-        print(herp)
+        -- print(herp)
     end
 
 end
@@ -347,6 +378,6 @@ function client:start()
 
 end
 
-local derp = client:new("Fretabladid", "http://antsgame.azurewebsites.net")
--- local derp = client:new("Fretabladid", "http://localhost:16901")
+-- local derp = client:new("Fretabladid", "http://antsgame.azurewebsites.net")
+local derp = client:new("Fretabladid", "http://localhost:16901")
 derp:start()

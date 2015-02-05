@@ -203,11 +203,19 @@ function client:updateBoard(gameState)
     -- setup a defense
     -- (for now: .25 of the ants will ant dance around the base)
     local antsToDance = math.ceil(.25 * #gameState.FriendlyAnts)
+    local area = antsToDance^2 + antsToDance^2
     local smallestAnts = Heap()
     local currentlyDancing = 0
     for j, ant in pairs(self.ants) do
         if ant.status == "DANCE" then
             currentlyDancing = currentlyDancing + 1
+        elseif ant.status == "goHome" then
+            currentlyDancing = currentlyDancing + 1
+            if self.board:dist2(ant.x, ant.y, myHill.X+1, myHill.Y+1) <= area then
+                ant.status = "DANCE"
+                ant.destinationX = myHill.X+1
+                ant.destinationY = myHill.Y+1
+            end
         else
             smallestAnts:push(ant, self.board:dist2(ant.x, ant.y, myHill.X+1, myHill.Y+1))
         end
@@ -215,11 +223,31 @@ function client:updateBoard(gameState)
 
     -- pop off the nearest quarter and let them DANCE
     antsToDance = antsToDance - currentlyDancing
-    if antsToDance > 1 then
+    if antsToDance > 0 then
         local thriller
         for i = 1, antsToDance do
             thriller = smallestAnts:pop()
             thriller.status = "DANCE"
+            if self.board:dist2(thriller.x, thriller.y, myHill.X+1, myHill.Y+1) > area then
+                thriller.status = "goHome"
+                thriller.destinationX = myHill.X+1
+                thriller.destinationY = myHill.Y+1
+            end
+        end
+    -- SO, we're losing ants...
+    elseif antsToDance < 0 then
+        local stopDancing = math.abs(antsToDance)
+        for j, ant in pairs(self.ants) do
+            if stopDancing > 0 and ant.status == "goHome" then
+                ant.status = nil
+                stopDancing = stopDancing - 1
+            end
+        end
+        for j, ant in pairs(self.ants) do
+            if stopDancing > 0 and ant.status == "DANCE" then
+                ant.status = nil
+                stopDancing = stopDancing - 1
+            end
         end
     end
 
@@ -252,7 +280,7 @@ function client:updateBoard(gameState)
                 nearestAnt = ant
             end
         end
-        if shortestDistance ~= math.huge and nearestAnt.status == nil then
+        if shortestDistance ~= math.huge then
             -- self.board.cells[foodX][foodY].type = "finalDestination"
             nearestAnt.status = "gather"
             nearestAnt.destinationX = self.enemyHill[i].x
@@ -317,10 +345,10 @@ function client:update(gameState)
         local currentAnt = self.ants[currentId]
         local crazyRandom
 
-        if currentAnt.status == nil then
+        if currentAnt.status == nil or currentAnt.status == "DANCE" then
             local firstFree = self.board:findFirstAvailable(currentAnt.x, currentAnt.y, math.random(4))
             crazyRandom = firstFree
-        elseif currentAnt.status == "gather" then
+        elseif currentAnt.status == "gather" or currentAnt.status == "goHome" then
             local path = self.board:aStar(currentAnt.x, currentAnt.y, currentAnt.destinationX, currentAnt.destinationY)
 
             if path == nil or path[1] == nil then 

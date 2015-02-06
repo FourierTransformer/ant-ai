@@ -31,13 +31,14 @@ function board:__init(width, height)
     self.width = width
     self.height = height
     self.typeHeuristic = {
-        ["food"] = 0,
-        ["free"] = 5,
-        ["myHill"] = 5,
-        ["ant"] = math.huge,
-        ["enemy"] = 0,
+        ["food"] = -1,
+        ["free"] = 1,
+        ["myHill"] = 1,
+        ["ant"] = 10,
+        ["enemy"] = 1,
+        ["futureEnemy"] = -1,
         ["enemyHill"] = 0,
-        ["wall"] = math.huge
+        ["wall"] = 10
     }
     -- initialize all the cells
     for i = 1, width do
@@ -75,6 +76,10 @@ function board:__init(width, height)
         end
     end
 
+end
+
+function board:updateEnemyPosition(x, y, direction)
+    self.cells[x][y].neighbors[direction].type = "futureEnemy"
 end
 
 function board:updateAntPosition(x, y, direction)
@@ -146,38 +151,51 @@ end
 
 function board:findFirstAvailable(x, y, direction)
     local direction = direction % 4 + 1
+    local enemyHillDirection = nil
+    local foodDirection = nil
+    local futureEnemyDirection = nil
     local goodDirection = nil
     local i = 1
     while i <= 4 do
         local neigh = self.cells[x][y].neighbors[direction]
-        if neigh.type == "food" then return direction end
+        if neigh.type == "enemyHill" then enemyHillDirection = direction end
+        if neigh.type == "food" then foodDirection = direction end
+        if neigh.type == "futureEnemy" then futureEnemyDirection = direction end
         if neigh.type ~= "ant" and neigh.type ~= "wall" then
             goodDirection = direction
         end
         direction = direction % 4 + 1
         i = i + 1
     end
-    return goodDirection
+    if enemyHillDirection then
+        return enemyHillDirection, true
+    elseif futureEnemyDirection then
+        return futureEnemyDirection, true
+    elseif foodDirection then
+        return foodDirection, true
+    else
+        return goodDirection, false
+    end
 end
 
 function board:clear()
     for i = 1, self.width do
         for j = 1, self.height do
-            self.cells[i][j].type = nil
+            self.cells[i][j].type = "free"
             self.cells[i][j].id = nil
         end
     end
 end
 
 function board:dist2(startX, startY, endX, endY)
-    local dx, dy = (startX - endX), (startY - endY)
-    if math.abs(dx) > self.width / 2 then
-        dx = math.abs(dx) - self.width
+    local dx, dy = math.abs(startX - endX), math.abs(startY - endY)
+    if dx > self.width / 2 then
+        dx = math.abs(dx - self.width)
     end
-    if math.abs(dy) > self.height / 2 then
-        dy = math.abs(dy) - self.height
+    if dy > self.height / 2 then
+        dy = math.abs(dy - self.height)
     end
-    return dx * dx + dy * dy
+    return dx + dy
 end
 
 local function constructPath(cameFrom, cameFromDirection, currentNode)
@@ -190,7 +208,7 @@ local function constructPath(cameFrom, cameFromDirection, currentNode)
     return final
 end
 
-function board:aStar(startX, startY, endX, endY)
+function board:aStar(startX, startY, endX, endY, friends)
     local closedList = {}
     local openList = Heap()
     local cameFrom = {}
@@ -199,7 +217,7 @@ function board:aStar(startX, startY, endX, endY)
     for i = 1, self.width do
         for j = 1, self.height do
             local curentCell = self.cells[i][j]
-            linkCost[curentCell.Id] = self.typeHeuristic[curentCell.type]
+            linkCost[curentCell.Id] = 0
         end
     end
 
@@ -216,7 +234,7 @@ function board:aStar(startX, startY, endX, endY)
         closedList[current.Id] = true
         for i = 1, #current.neighbors do
             local neighbor = current.neighbors[i]
-            if closedList[neighbor.Id] == nil and neighbor.type ~= "ant" and neighbor.type ~= "wall" then
+            if closedList[neighbor.Id] == nil and neighbor.type ~= friends and neighbor.type ~= "wall" then
 
                 local tentLinkCost = linkCost[current.Id] + self:dist2(current.x, current.y, neighbor.x, neighbor.y)
 
@@ -224,7 +242,7 @@ function board:aStar(startX, startY, endX, endY)
                     cameFrom[neighbor] = current
                     cameFromDirection[neighbor] = i
                     linkCost[neighbor.Id] = tentLinkCost
-                    local totalCost = linkCost[neighbor.Id] + self:dist2(neighbor.x, neighbor.y, endX, endY)
+                    local totalCost = tentLinkCost + (self.typeHeuristic[neighbor.type] * self:dist2(neighbor.x, neighbor.y, endX, endY))
                     openList:push(neighbor, totalCost)
                 end
 

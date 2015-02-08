@@ -109,6 +109,9 @@ function client:__init(name, url)
     self.food = {}
     self.enemyHill = {}
     self.directions = {"left", "right", "up", "down"}
+    self.explorers = 0
+    self.attackers = 0
+    self.gatherers = 0
 end
 
 function client:logon()
@@ -162,15 +165,22 @@ function client:inputGeneric(gameState)
     end
 
     -- THE ENEMY HILL(s?)
-    for i= 1, #gameState.EnemyHills do
-        local currentHill = gameState.EnemyHills[i]
-        self.board.cells[currentHill.X+1][currentHill.Y+1].type = "enemyHill"
-        self.enemyHill[i] = enemyHill:new(currentHill.X+1, currentHill.Y+1)
+    if gameState.EnemyHills and gameState.EnemyHills[1] then
+        for i= 1, #gameState.EnemyHills do
+            local currentHill = gameState.EnemyHills[i]
+            self.board.cells[currentHill.X+1][currentHill.Y+1].type = "enemyHill"
+            self.enemyHill[i] = enemyHill:new(currentHill.X+1, currentHill.Y+1)
+        end
     end
 
 end
 
-function client:setupAnts(FriendlyAnts, Width, Height)
+function client:setupAnts(FriendlyAnts, Width, Height, Fog)
+    -- Gotta clear this up real quick for our count
+    self.explorers = 0
+    self.attackers = 0
+    self.gatherers = 0
+
     -- GO through and create/update a bunch of ants
     for k = 1, #FriendlyAnts do
 
@@ -192,8 +202,16 @@ function client:setupAnts(FriendlyAnts, Width, Height)
                 if destType ~= "food" then
                     currentAnt.status = nil
                 end
+                self.gatherers = self.gatherers + 1
             elseif currentAnt.status == "oneAway" then
                 currentAnt.status = nil
+            elseif currentAnt.status == "explore" then
+                if currentAnt.x == currentAnt.destinationX and currentAnt.y == currentAnt.destinationY then
+                    currentAnt.status = nil
+                end
+                self.explorers = self.explorers + 1
+            elseif currentAnt.status == "attack" then
+                self.attackers = self.attackers + 1
             end
 
         -- the ant doesn't exist
@@ -207,24 +225,24 @@ function client:setupAnts(FriendlyAnts, Width, Height)
         self.board.cells[currentAnt.x][currentAnt.y].type = "ant"
 
         -- determine approachability
-        for j = 10, 0, -1 do
-            for i = -(10-j), 10-j do
+        for j = Fog, 0, -1 do
+            for i = -(Fog-j), Fog-j do
                 local x = (currentAnt.x+i)
                 x = x % Width + 1
                 local y = (currentAnt.y+j)
                 y = y % Height + 1
-                self.board.cells[x][y].approachability = 0
+                self.board.cells[x][y].approachability = self.board.cells[x][y].approachability - 1
             end
         end
 
         -- poor man's BFS (bottom)
-        for j = -10, -1, 1 do
-            for i = -(10+j), 10+j do
+        for j = -Fog, -1, 1 do
+            for i = -(Fog+j), Fog+j do
                 local x = (currentAnt.x+i)
                 x = x % Width + 1
                 local y = (currentAnt.y+j)
                 y = y % Height + 1
-                self.board.cells[x][y].approachability = 0
+                self.board.cells[x][y].approachability = self.board.cells[x][y].approachability - 1
             end
         end
     end
@@ -232,7 +250,8 @@ end
 
 function client:defense(myHill, FriendlyAnts)
 -- (for now: .25 of the ants will ant dance around the base)
-    local antsToDance = math.ceil(.25 * #FriendlyAnts)
+    local antsToDance = math.ceil(.3 * #FriendlyAnts)
+    print("Defenders: ", antsToDance)
     local area = antsToDance*2
     local smallestAnts = Heap()
     local currentlyDancing = 0
@@ -320,7 +339,7 @@ function client:oneOff(ants)
     for i = 1, #ants do
         local currentId = ants[i].Id
         local ant = self.ants[currentId]
-        if ant.status == nil or ant.status == "gather" then
+        if ant.status == nil or ant.status == "gather" or ant.status == "explore" or ant.status == "goHome" then
             local direction, worthIt = self.board:findFirstAvailable(ant.x, ant.y, 1)
             -- worthIt returns true if futureEnemy or food is one away
             if worthIt then
@@ -332,79 +351,118 @@ function client:oneOff(ants)
     end
 end
 
-function client:updateBoard(gameState)
+function client:explore(FriendlyAnts, Fog)
+    -- HOW MANY EXPLORERS?!?!?
+    local antExplorers = math.floor(.2 * #FriendlyAnts)
+    print("Explorers: ", antExplorers)
+    
+    -- figure out how many ants we have explorin'
+    antExplorers = antExplorers - self.explorers
 
-    -- do all the boring stuffs
-    self:inputGeneric(gameState)
+    -- SEND 'EM OUT!
+    if antExplorers > 0 then
 
-    -- ANTS ANTS ANTS
-    self:setupAnts(gameState.FriendlyAnts, gameState.Width, gameState.Height)
+        -- FIND OUT WHERE WE NEED TO GO!
+        local approachability = Heap:new()
+        for i = 1, self.board.width do
+            for j = 1, self.board.height do
+                local cell = self.board.cells[i][j]
+                approachability:push(cell, -cell.approachability)
+            end
+        end
 
-    -- setup a defense
-    self:defense(gameState.Hill, gameState.FriendlyAnts)
+        -- send some ants there!
+        for i = #FriendlyAnts, 1, -1 do
+            local currentAnt = self.ants[FriendlyAnts[i].Id]
+            if antExplorers > 0 and currentAnt.status == nil then
+                local cellToGoTo = approachability:pop()
+                currentAnt.status = "explore"
+                currentAnt.destinationX = cellToGoTo.x
+                currentAnt.destinationY = cellToGoTo.y
+                antExplorers = antExplorers - 1
+            end
+        end
 
-    -- guess where the enemy is going
-    self:guessEnemy(gameState.EnemyAnts, gameState.Hill, gameState.FogOfWar)
+    -- OH NOES we gotta clear up some ant explorers (aka RETREAT... oh boy)
+    else
 
-    -- handle things that are one square off
-    self:oneOff(gameState.FriendlyAnts)
+        for i = 1, #FriendlyAnts do
+            local currentAnt = self.ants[FriendlyAnts[i].Id]
+            if antExplorers < 0 and currentAnt.status == "explore" then
+                currentAnt.status = nil
+                currentAnt.destinationX = nil
+                currentAnt.destinationY = nil
+                antExplorers = antExplorers + 1
+            end
+        end        
 
-    -- head for the enemy hill!
-    -- for i = 1, #self.enemyHill do
-    --     local shortestDistance = math.huge
-    --     local nearestAnt = nil
-    --     for j, ant in pairs(self.ants) do
-    --         local antDist = self.board:dist2(ant.x, ant.y, self.enemyHill[i].x, self.enemyHill[i].y)
-    --         if antDist < shortestDistance then
-    --             shortestDistance = antDist
-    --             nearestAnt = ant
-    --         end
-    --     end
-    --     if shortestDistance ~= math.huge and nearestAnt.status == nil then
-    --         -- self.board.cells[foodX][foodY].type = "finalDestination"
-    --         nearestAnt.status = "gather"
-    --         nearestAnt.destinationX = self.enemyHill[i].x
-    --         nearestAnt.destinationY = self.enemyHill[i].y
-    --     end
-    -- end
+    end
+end
 
+-- Sends the nearest FREE ant to the enemy hill
+function client:attack(FriendlyAnts)
+    -- HOW MANY EXPLORERS?!?!?
+    local antAttackers = math.ceil(.1 * #FriendlyAnts)
+    print("Attackers: ", antAttackers)
+
+    -- figure out how many to send out
+    antAttackers = antAttackers - self.attackers
+
+    -- SEND SOME OUT
+    if antAttackers > 0 then
+        for i = 1, antAttackers do
+            -- head for the enemy hill!
+            for i = 1, #self.enemyHill do
+                local shortestDistance = math.huge
+                local nearestAnt = nil
+                for j, ant in pairs(self.ants) do
+                    -- only send a free ant
+                    if ant.status == nil then
+                        local antDist = self.board:dist2(ant.x, ant.y, self.enemyHill[i].x, self.enemyHill[i].y)
+                        if antDist < shortestDistance then
+                            shortestDistance = antDist
+                            nearestAnt = ant
+                        end
+                    end
+                end
+                if shortestDistance ~= math.huge then
+                    -- self.board.cells[foodX][foodY].type = "finalDestination"
+                    nearestAnt.status = "attack"
+                    nearestAnt.destinationX = self.enemyHill[i].x
+                    nearestAnt.destinationY = self.enemyHill[i].y
+                end
+            end
+        end
+    end
+end
+
+function client:collectFood()
     -- collect all the nearest food.
     for i = 1, #self.food do
         local shortestDistance = math.huge
         local nearestAnt = nil
         for j, ant in pairs(self.ants) do
-            local antDist = self.board:dist2(ant.x, ant.y, self.food[i].x, self.food[i].y)
-            if antDist < shortestDistance then
-                shortestDistance = antDist
-                nearestAnt = ant
+            if ant.status == nil then
+                local antDist = self.board:dist2(ant.x, ant.y, self.food[i].x, self.food[i].y)
+                if antDist < shortestDistance then
+                    shortestDistance = antDist
+                    nearestAnt = ant
+                end
             end
         end
-        if shortestDistance ~= math.huge and nearestAnt.status == nil then
+        if shortestDistance ~= math.huge then
             -- self.board.cells[foodX][foodY].type = "finalDestination"
             nearestAnt.status = "gather"
             nearestAnt.destinationX = self.food[i].x
             nearestAnt.destinationY = self.food[i].y
         end
     end
+end
 
-    if #gameState.FriendlyAnts > 20 then
-        for i= 1, #gameState.EnemyHills do
-            local currentHill = gameState.EnemyHills[i]
-            self.board.cells[currentHill.X+1][currentHill.Y+1].type = "enemyHill"
-            for k = 1, #gameState.FriendlyAnts do
-                local currentAnt = gameState.FriendlyAnts[k]
-                if self.ants[currentAnt.Id].status ~= "DANCE" then
-                    self.ants[currentAnt.Id].status = "attack"
-                    self.ants[currentAnt.Id].destinationX = currentHill.X+1
-                    self.ants[currentAnt.Id].destinationY = currentHill.Y+1
-                end
-            end
-        end
-    end
-
-    for j = 1, gameState.Height do
+function client:print(Height, Width)
+    for j = 1, Height do
         local herp = ""
-        for i = 1, gameState.Width do
+        for i = 1, Width do
             local currentCell = self.board.cells[i][j]
             if currentCell.type == "ant" then
                 herp = herp .. "A "
@@ -418,7 +476,54 @@ function client:updateBoard(gameState)
         end
         print(herp)
     end
+end
 
+function client:updateAnts(gameState)
+
+    -- do all the boring stuffs
+    self:inputGeneric(gameState)
+
+    -- ANTS ANTS ANTS
+    self:setupAnts(gameState.FriendlyAnts, gameState.Width, gameState.Height, gameState.FogOfWar)
+
+    -- setup a defense of 25% ants
+    self:defense(gameState.Hill, gameState.FriendlyAnts)
+
+    -- guess where the enemy is going
+    self:guessEnemy(gameState.EnemyAnts, gameState.Hill, gameState.FogOfWar)
+
+    -- handle things that are one square off
+    self:oneOff(gameState.FriendlyAnts)
+
+    -- EXPLORE THE SPACE YO
+    self:explore(gameState.FriendlyAnts)
+
+    -- send 10% to their doom (if we can see it)
+    if gameState.EnemyHills and gameState.EnemyHills[1] then
+        self:attack(gameState.FriendlyAnts)
+    end
+
+    -- collect all them foods
+    self:collectFood()
+
+    -- FRENZY MODE. FUN STUFFS
+    -- if #gameState.FriendlyAnts > 20 then
+    --     for i= 1, #gameState.EnemyHills do
+    --         local currentHill = gameState.EnemyHills[i]
+    --         self.board.cells[currentHill.X+1][currentHill.Y+1].type = "enemyHill"
+    --         for k = 1, #gameState.FriendlyAnts do
+    --             local currentAnt = gameState.FriendlyAnts[k]
+    --             if self.ants[currentAnt.Id].status ~= "DANCE" then
+    --                 self.ants[currentAnt.Id].status = "attack"
+    --                 self.ants[currentAnt.Id].destinationX = currentHill.X+1
+    --                 self.ants[currentAnt.Id].destinationY = currentHill.Y+1
+    --             end
+    --         end
+    --     end
+    -- end
+
+    -- print it out! (aka debuggs)
+    -- self:print(gameState.Height, gameState.Width)
 end
 
 function client:update(gameState)
@@ -428,6 +533,7 @@ function client:update(gameState)
         self.board = board:new(gameState.Width, gameState.Height)
     end
 
+    -- LAGS BRO
     self:getTurnInfo()
 
     -- create a distribution of places that need to be visited
@@ -438,39 +544,45 @@ function client:update(gameState)
     end
 
     -- figure out that hive mind map!
-    self:updateBoard(gameState)
+    self:updateAnts(gameState)
 
     -- update turn info
     self:getTurnInfo()
 
+    -- handle all the moves
     for i = 1, #gameState.FriendlyAnts do
         local currentId = gameState.FriendlyAnts[i].Id
         local currentAnt = self.ants[currentId]
-        local crazyRandom
+        local futureDirection
 
         if currentAnt.status == nil or currentAnt.status == "DANCE" then
             local firstFree = self.board:findFirstAvailable(currentAnt.x, currentAnt.y, math.random(4))
-            crazyRandom = firstFree
-        elseif currentAnt.status == "gather" or currentAnt.status == "goHome" or currentAnt.status == "attack" then
+            futureDirection = firstFree
+        elseif  currentAnt.status == "gather" or currentAnt.status == "goHome" or 
+                currentAnt.status == "attack" or currentAnt.status == "explore" then
             local path = self.board:aStar(currentAnt.x, currentAnt.y, currentAnt.destinationX, currentAnt.destinationY, "ant")
 
             if path == nil or path[1] == nil then 
                 currentAnt.status = nil 
                 currentAnt.destinationX = nil
                 currentAnt.destinationY = nil
-                crazyRandom = self.board:findFirstAvailable(currentAnt.x, currentAnt.y, math.random(4))
+                futureDirection = self.board:findFirstAvailable(currentAnt.x, currentAnt.y, math.random(4))
             else
-                crazyRandom = path[1]
+                futureDirection = path[1]
             end
         end
 
-        if crazyRandom ~= nil then
-            self.board:updateAntPosition(currentAnt.x, currentAnt.y, crazyRandom)
-            self.pendingMoves [ #self.pendingMoves+1 ] = {antId = currentId, direction = self.directions[crazyRandom]}
+        if futureDirection ~= nil then
+            self.board:updateAntPosition(currentAnt.x, currentAnt.y, futureDirection)
+            self.pendingMoves [ #self.pendingMoves+1 ] = {antId = currentId, direction = self.directions[futureDirection]}
         end
 
     end
 
+    -- update turn info
+    self:getTurnInfo()
+
+    -- clear board!
     self.board:clear()
 
 end
@@ -505,6 +617,6 @@ function client:start()
 
 end
 
-local derp = client:new("Fretabladid", "http://antsgame.azurewebsites.net")
+local derp = client:new("GAZORPAZORP", "http://antsgame.azurewebsites.net")
 -- local derp = client:new("Fretabladid", "http://localhost:16901")
 derp:start()

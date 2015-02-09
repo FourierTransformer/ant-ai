@@ -112,6 +112,7 @@ function client:__init(name, url)
     self.explorers = 0
     self.attackers = 0
     self.gatherers = 0
+    self.turnsSinceLastFrenzy = 0
 end
 
 function client:logon()
@@ -343,7 +344,7 @@ function client:oneOff(ants)
         local ant = self.ants[currentId]
         if ant.status == nil or ant.status == "gather" or ant.status == "explore" or ant.status == "goHome" then
             local direction, worthIt = self.board:findFirstAvailable(ant.x, ant.y, 1)
-            -- worthIt returns true if futureEnemy or food is one away
+            -- worthIt returns true if futureEnemy, food, or enemyHill is one away
             if worthIt then
                 ant.status = "oneAway"
                 self.board:updateAntPosition(ant.x, ant.y, direction)
@@ -353,9 +354,11 @@ function client:oneOff(ants)
     end
 end
 
-function client:explore(FriendlyAnts, Fog)
+-- set off some of the ants to explore around the board.
+-- in theory would become fairly well distributed
+function client:explore(FriendlyAnts)
     -- HOW MANY EXPLORERS?!?!?
-    local antExplorers = math.floor(.2 * #FriendlyAnts)
+    local antExplorers = math.floor(.3 * #FriendlyAnts)
     print("Explorers: ", antExplorers)
     
     -- figure out how many ants we have explorin'
@@ -438,8 +441,8 @@ function client:attack(FriendlyAnts)
     end
 end
 
+-- collect all the nearest food.
 function client:collectFood()
-    -- collect all the nearest food.
     for i = 1, #self.food do
         local shortestDistance = math.huge
         local nearestAnt = nil
@@ -458,6 +461,28 @@ function client:collectFood()
             nearestAnt.destinationX = self.food[i].x
             nearestAnt.destinationY = self.food[i].y
         end
+    end
+end
+
+-- Created to mix it up a little and get a charge going.
+-- might just win a few games!
+function client:FRENZY(FriendlyAnts)
+    if #FriendlyAnts > 20 then
+        for i = 1, #self.enemyHill do
+            local currentHill = self.enemyHill[i]
+            for k = 1, #FriendlyAnts do
+                local currentAnt = FriendlyAnts[k]
+                if self.ants[currentAnt.Id].status ~= "DANCE" then
+                    print("FRENZY")
+                    -- set to gather rather than attack so it can collect more
+                    -- food if it's one away and reset some of the ants
+                    self.ants[currentAnt.Id].status = "gather"
+                    self.ants[currentAnt.Id].destinationX = currentHill.x
+                    self.ants[currentAnt.Id].destinationY = currentHill.y
+                end
+            end
+        end
+        self.turnsSinceLastFrenzy = 0
     end
 end
 
@@ -508,21 +533,10 @@ function client:updateAnts(gameState)
     -- collect all them foods
     self:collectFood()
 
-    -- FRENZY MODE. FUN STUFFS
-    -- if #gameState.FriendlyAnts > 20 then
-    --     for i= 1, #gameState.EnemyHills do
-    --         local currentHill = gameState.EnemyHills[i]
-    --         self.board.cells[currentHill.X+1][currentHill.Y+1].type = "enemyHill"
-    --         for k = 1, #gameState.FriendlyAnts do
-    --             local currentAnt = gameState.FriendlyAnts[k]
-    --             if self.ants[currentAnt.Id].status ~= "DANCE" then
-    --                 self.ants[currentAnt.Id].status = "attack"
-    --                 self.ants[currentAnt.Id].destinationX = currentHill.X+1
-    --                 self.ants[currentAnt.Id].destinationY = currentHill.Y+1
-    --             end
-    --         end
-    --     end
-    -- end
+    -- FRENZY MODE. FUN STUFFS. 20% chance it happens based on some criterias
+    if self.turnsSinceLastFrenzy > 30 and math.random() < .2 then
+        self:FRENZY(gameState.FriendlyAnts)
+    end
 
     -- print it out! (aka debuggs)
     -- self:print(gameState.Height, gameState.Width)
@@ -564,6 +578,7 @@ function client:update(gameState)
                 currentAnt.status == "attack" or currentAnt.status == "explore" then
             local path = self.board:aStar(currentAnt.x, currentAnt.y, currentAnt.destinationX, currentAnt.destinationY, "ant")
 
+            -- maybe A* failed us... Let's just keep moving around! :(
             if path == nil or path[1] == nil then 
                 currentAnt.status = nil 
                 currentAnt.destinationX = nil
@@ -574,6 +589,7 @@ function client:update(gameState)
             end
         end
 
+        -- REALLY don't want to crash the server/game. so always good to doulbe check
         if futureDirection ~= nil then
             self.board:updateAntPosition(currentAnt.x, currentAnt.y, futureDirection)
             self.pendingMoves [ #self.pendingMoves+1 ] = {antId = currentId, direction = self.directions[futureDirection]}
@@ -615,10 +631,10 @@ function client:start()
         if self.timeToNextTurn > 0 then
             sleep(self.timeToNextTurn)
         end
+        self.turnsSinceLastFrenzy = self.turnsSinceLastFrenzy + 1
     end
 
 end
 
-local derp = client:new("GAZORPAZORP", "http://antsgame.azurewebsites.net")
--- local derp = client:new("Fretabladid", "http://localhost:16901")
-derp:start()
+local agent = client:new("SHAK", "http://antsgame.azurewebsites.net")
+agent:start()

@@ -83,42 +83,7 @@ function board:updateEnemyPosition(x, y, direction)
 end
 
 function board:updateAntPosition(x, y, direction)
-    -- self.cells[x][y].type = "oldAnt"
     self.cells[x][y].neighbors[direction].type = "ant"
-    -- if self.cells[x][y].type == "ant" then
-    --     self.cells[x][y].type = nil
-    --     if direction == "right" then
-    --         if x == self.width then
-    --             self.cells[1][y].type = "ant"
-    --         else
-    --             self.cells[x+1][y].type = "ant"
-    --         end
-    --     elseif direction == "left" then
-    --         if x == 1 then
-    --             self.cells[self.width][y].type = "ant"
-    --         else
-    --             self.cells[x-1][y].type = "ant"
-    --         end
-    --     elseif direction == "up" then
-    --         if y == 1 then
-    --             self.cells[x][self.height].type = "ant"
-    --         else
-    --             self.cells[x][y-1].type = "ant"
-    --         end
-    --     elseif direction == "down" then
-    --         if y == self.height then
-    --             self.cells[x][1].type = "ant"
-    --         else
-    --             self.cells[x][y+1].type = "ant"
-    --         end
-    --     end
-    -- else
-    --     -- print("Current Type:", self.cells[x][y].type)
-    --     -- error("OH MAN, you tried updating a position of something that wasn't an ant...")
-    -- end
-
-
-
 end
 
 function board:checkFutureType(x, y, direction)
@@ -204,7 +169,6 @@ local function constructPath(cameFrom, cameFromDirection, currentNode)
         table.insert(final, 1, cameFromDirection[currentNode])
         currentNode = cameFrom[currentNode]
     end
-    -- for i,v in ipairs(final) do print(i, v) end
     return final
 end
 
@@ -251,7 +215,7 @@ function board:aStar(startX, startY, endX, endY, friends)
 
     end
 
-    print("no path found...")
+    -- print("no path found...")
 
 end
 

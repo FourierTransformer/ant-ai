@@ -252,7 +252,7 @@ function client:defense(myHill, FriendlyAnts)
 -- (for now: .25 of the ants will ant dance around the base)
     local antsToDance = math.ceil(.3 * #FriendlyAnts)
     print("Defenders: ", antsToDance)
-    local area = antsToDance*2
+    local area = antsToDance
     local smallestAnts = Heap()
     local currentlyDancing = 0
     for j, ant in pairs(self.ants) do
@@ -265,7 +265,7 @@ function client:defense(myHill, FriendlyAnts)
                 ant.destinationX = myHill.X+1
                 ant.destinationY = myHill.Y+1
             end
-        else
+        elseif ant.status == nil then
             smallestAnts:push(ant, self.board:dist2(ant.x, ant.y, myHill.X+1, myHill.Y+1))
         end
     end
@@ -275,12 +275,14 @@ function client:defense(myHill, FriendlyAnts)
     if antsToDance > 0 then
         local thriller
         for i = 1, antsToDance do
-            thriller = smallestAnts:pop()
-            thriller.status = "DANCE"
-            if self.board:dist2(thriller.x, thriller.y, myHill.X+1, myHill.Y+1) > area then
-                thriller.status = "goHome"
-                thriller.destinationX = myHill.X+1
-                thriller.destinationY = myHill.Y+1
+            if not smallestAnts:isEmpty() then
+                thriller = smallestAnts:pop()
+                thriller.status = "DANCE"
+                if self.board:dist2(thriller.x, thriller.y, myHill.X+1, myHill.Y+1) > area then
+                    thriller.status = "goHome"
+                    thriller.destinationX = myHill.X+1
+                    thriller.destinationY = myHill.Y+1
+                end
             end
         end
 

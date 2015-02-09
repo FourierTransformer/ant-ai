@@ -265,7 +265,7 @@ function client:defense(myHill, FriendlyAnts)
                 ant.destinationX = myHill.X+1
                 ant.destinationY = myHill.Y+1
             end
-        elseif ant.status == nil then
+        else
             smallestAnts:push(ant, self.board:dist2(ant.x, ant.y, myHill.X+1, myHill.Y+1))
         end
     end

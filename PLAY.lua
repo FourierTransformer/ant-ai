@@ -76,11 +76,6 @@ function ant:__init(x, y)
     self.destinationY = nil
 end
 
-function ant:dist2(x, y)
-    local dx, dy = (self.x - x), (self.y - y)
-    return dx * dx + dy * dy
-end
-
 local food = class()
 function food:__init(x, y)
     self.x = x
